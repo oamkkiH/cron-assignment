@@ -1,9 +1,15 @@
-.env
-*.env
-.env.*
-weather_app.py
-fetch_weather.py
+# Python virtual environment
 venv/
+
+# Sensitive environment file
+.env
+
+# Bytecode
 __pycache__/
+
+# Streamlit cache
+.streamlit/
+
+# Logs
 *.log
 
