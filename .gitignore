@@ -1,0 +1,9 @@
+.env
+*.env
+.env.*
+weather_app.py
+fetch_weather.py
+venv/
+__pycache__/
+*.log
+
