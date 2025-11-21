@@ -1,19 +1,14 @@
 #!/bin/bash
-VENV_DIR="venv"
+# Working directory
+cd /home/ubuntu/cron_assignment || exit
 
-if [ ! -d "$VENV_DIR" ]; then
-  python3 -m venv $VENV_DIR
-fi
+# Use absolute venv path
+VENV="/home/ubuntu/cron_assignment/venv"
 
-source $VENV_DIR/bin/activate
+# Activate venv
+source "$VENV/bin/activate"
 
-if [ -f "requirements.txt" ]; then
-  pip install --upgrade pip
-  pip install -r requirements.txt
-fi
+# Run weather fetch
+python3 fetch_weather.py >> weather_cron.log 2>&1
 
-if [ -f "fetch_weather.py" ]; then
-  python fetch_weather.py
-fi
-
-echo "Valmis!"
+echo "$(date '+%Y-%m-%d %H:%M:%S') OK" >> weather_cron.log

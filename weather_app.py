@@ -6,10 +6,31 @@ from dotenv import load_dotenv
 import os
 
 # -------------------------------------------------------------------
-# PAGE SETTINGS
+# PAGE SETTINGS + GRADIENT BACKGROUND
 # -------------------------------------------------------------------
-st.set_page_config(page_title="Säädata – OpenWeather + Weatherbit",
-                   layout="wide")
+st.set_page_config(page_title="Säädata – OpenWeather (API) + Weatherbit (API)", layout="wide")
+
+st.markdown("""
+    <style>
+    .stApp {
+        background: linear-gradient(to bottom right, #d0ecf7, #f0ffe8);
+        background-attachment: fixed;
+    }
+    .cron-bar {
+        background: rgba(255,255,255,0.5);
+        padding: 12px;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        margin-top: 40px;
+        backdrop-filter: blur(4px);
+    }
+    .cron-title {
+        font-weight: 700;
+        font-size: 1.2rem;
+        margin-bottom: 6px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # -------------------------------------------------------------------
 # LOAD .ENV
@@ -22,50 +43,11 @@ DB_PASSWORD = os.getenv("MYSQL_PASSWORD")
 DB_NAME = os.getenv("MYSQL_DB")
 
 # -------------------------------------------------------------------
-# BACKGROUND IMAGE LOGIC
-# -------------------------------------------------------------------
-
-def set_background(image_file):
-    """Insert a CSS background."""
-    with open(image_file, "rb") as f:
-        data = f.read()
-    encoded = data.hex()
-    st.markdown(
-        f"""
-        <style>
-        .stApp {{
-            background-image: url("data:image/jpg;base64,{data.hex()}");
-            background-size: cover;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-def choose_background(desc):
-    """Pick background based on description."""
-    desc = desc.lower()
-    if "snow" in desc:
-        return "images/snow.jpg"
-    if "rain" in desc:
-        return "images/rain.jpg"
-    if "fog" in desc or "mist" in desc:
-        return "images/fog.jpg"
-    if "cloud" in desc:
-        return "images/cloudy.jpg"
-    return "images/sunny.jpg"
-
-# -------------------------------------------------------------------
 # MYSQL FETCH
 # -------------------------------------------------------------------
-
 def fetch_city_data(city_name):
-    """Fetch latest OpenWeather + Weatherbit entries."""
     conn = mysql.connector.connect(
-        host=DB_HOST,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME
+        host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
     )
 
     df = pd.read_sql(
@@ -84,124 +66,73 @@ def fetch_city_data(city_name):
 
 
 # -------------------------------------------------------------------
-# UI START
+# CRON-LOG FETCH (single-line, compact ✔ format)
 # -------------------------------------------------------------------
+def read_cron_events():
+    logfile = "/home/ubuntu/cron_assignment/weather_cron.log"
+    if not os.path.exists(logfile):
+        return []
 
-st.title("Säädata – OpenWeather + Weatherbit")
+    with open(logfile, "r") as f:
+        lines = f.readlines()
+
+    events = []
+    for line in reversed(lines[-300:]):     # read last 300 lines, reverse for latest first
+        if "OK" in line and line.strip().startswith("2025"):
+            try:
+                timestamp = line.split("OK")[0].strip()
+                t = timestamp[-8:]          # take HH:MM:SS
+                events.append(f"{t} ✔")
+            except:
+                pass
+        if len(events) >= 10:
+            break
+
+    return events
 
 
 # -------------------------------------------------------------------
-# SELECT CITY
+# USER SELECT CITY
 # -------------------------------------------------------------------
-
-city = st.selectbox("Valitse kaupunki:",
-                    ["Helsinki", "Oulu", "Tampere"])
-
+city = st.selectbox("Valitse kaupunki:", ["Helsinki", "Oulu", "Tampere"])
 
 df = fetch_city_data(city)
 
-# Show graceful message if database empty
-if df.empty:
-    st.warning("Ei vielä dataa tälle kaupungille.")
-    st.stop()
-
-# Ensure temperature int
-df["temperature"] = df["temperature"].astype(float).round().astype(int)
+latest_open = df[df["source"] == "openweather"].iloc[0]
+latest_wb = df[df["source"] == "weatherbit"].iloc[0]
 
 # -------------------------------------------------------------------
-# Pick latest sources
-# -------------------------------------------------------------------
-
-latest_open = df[df["source"] == "openweather"].head(1)
-latest_wbit = df[df["source"] == "weatherbit"].head(1)
-
-# Handle missing data
-if latest_open.empty:
-    st.error("OpenWeather-dataa ei löytynyt!")
-    st.stop()
-
-if latest_wbit.empty:
-    st.error("Weatherbit-dataa ei löytynyt!")
-    st.stop()
-
-open_temp = latest_open.iloc[0]["temperature"]
-open_desc = latest_open.iloc[0]["description"]
-open_time = latest_open.iloc[0]["timestamp"]
-
-wb_temp = latest_wbit.iloc[0]["temperature"]
-wb_desc = latest_wbit.iloc[0]["description"]
-wb_time = latest_wbit.iloc[0]["timestamp"]
-
-# -------------------------------------------------------------------
-# SET BACKGROUND IMAGE BASED ON OPENWEATHER (PRIMARY SOURCE)
-# -------------------------------------------------------------------
-
-bg = choose_background(open_desc)
-set_background(bg)
-
-# -------------------------------------------------------------------
-# TOP ROW – TWO CARDS
+# TWO WEATHER CARDS
 # -------------------------------------------------------------------
 col1, col2 = st.columns(2)
 
-# ---- CARD: OPENWEATHER ----
 with col1:
-    st.subheader(f"🌤️ OpenWeather – {city}")
+    st.subheader("🌤 OpenWeather API")
+    st.markdown(f"### {int(latest_open['temperature'])}°C")
+    st.caption(latest_open['description'])
+    st.caption(f"Päivitetty: {latest_open['timestamp']}")
 
-    # temperature color
-    if open_temp < 0:
-        color = "blue"
-    elif open_temp >= 25:
-        color = "red"
-    else:
-        color = "black"
-
-    st.markdown(
-        f"""
-        <div style="font-size:48px; font-weight:700; color:{color}">
-            {open_temp}°C
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.write(f"**Kuvaus:** {open_desc}")
-    st.caption(f"Päivitetty: {open_time}")
-
-
-# ---- CARD: WEATHERBIT ----
 with col2:
-    st.subheader(f"🌦️ Weatherbit – {city}")
+    st.subheader("🌐 Weatherbit API")
+    st.markdown(f"### {int(latest_wb['temperature'])}°C")
+    st.caption(latest_wb['description'])
+    st.caption(f"Päivitetty: {latest_wb['timestamp']}")
 
-    if wb_temp < 0:
-        color2 = "blue"
-    elif wb_temp >= 25:
-        color2 = "red"
-    else:
-        color2 = "black"
-
-    st.markdown(
-        f"""
-        <div style="font-size:48px; font-weight:700; color:{color2}">
-            {wb_temp}°C
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.write(f"**Kuvaus:** {wb_desc}")
-    st.caption(f"Päivitetty: {wb_time}")
-
+st.markdown("---")
 
 # -------------------------------------------------------------------
-# LAST UPDATE LABEL 
+# DISPLAY TABLE OF LAST 50 ENTRIES
 # -------------------------------------------------------------------
-last_update = df["timestamp"].max()
-st.caption(f"⏱️ Viimeisin päivitys tietokantaan: {last_update}")
-
-
-# -------------------------------------------------------------------
-# TABLE WITH ALL ENTRIES
-# -------------------------------------------------------------------
-st.subheader("Tallennetut säädatapisteet")
+st.subheader("📄 Viimeisimmät 50 havaintoa")
 st.dataframe(df, use_container_width=True)
+
+# -------------------------------------------------------------------
+# CRON LOG — ONE LINE AT BOTTOM
+# -------------------------------------------------------------------
+cron_events = read_cron_events()
+if cron_events:
+    cron_line = "  |  ".join(cron_events)
+else:
+    cron_line = "Ei lokitietoa"
+
+st.markdown("<div class='cron-bar'><div class='cron-title'>⏱ Cron-ajot</div>" + cron_line + "</div>", unsafe_allow_html=True)
